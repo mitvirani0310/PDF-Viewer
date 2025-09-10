@@ -1,51 +1,53 @@
-import { useEffect, useState } from "react";
-import PDFViewer from "./PDFViewer";
+// import { useEffect, useState } from "react";
 import SearchSidebar from "./SearchSidebar";
-import eventBus from "./eventBus";
+// import eventBus from "./eventBus";
 
 const DocumentViewer = ({ fileUrl, fileName }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [numPages, setNumPages] = useState(0);
-  const [scale, setScale] = useState(100);
+  // const [currentPage, setCurrentPage] = useState(1);
+  // const [numPages, setNumPages] = useState(0);
+  // const [scale, setScale] = useState(100);
 
-  useEffect(() => {
-    const onPageChanged = ({ page }) => {
-      setCurrentPage(page);
-    };
+  // useEffect(() => {
+  //   const onPageChanged = ({ page }) => {
+  //     setCurrentPage(page);
+  //   };
 
-    const onNumPagesChanged = ({ numPages }) => {
-      setNumPages(numPages);
-    };
+  //   const onNumPagesChanged = ({ numPages }) => {
+  //     setNumPages(numPages);
+  //   };
 
-    const onScaleChanged = ({ scale }) => {
-      setScale(scale);
-    };
+  //   const onScaleChanged = ({ scale }) => {
+  //     setScale(scale);
+  //   };
 
-    eventBus.on("pageChanged", onPageChanged);
-    eventBus.on("numPagesChanged", onNumPagesChanged);
-    eventBus.on("scaleChanged", onScaleChanged);
+  //   // eventBus.on("pageChanged", onPageChanged);
+  //   // eventBus.on("numPagesChanged", onNumPagesChanged);
+  //   // eventBus.on("scaleChanged", onScaleChanged);
 
-    return () => {
-      eventBus.off("pageChanged", onPageChanged);
-      eventBus.off("numPagesChanged", onNumPagesChanged);
-      eventBus.off("scaleChanged", onScaleChanged);
-    };
-  }, []);
+  //   return () => {
+  //     // eventBus.off("pageChanged", onPageChanged);
+  //     // eventBus.off("numPagesChanged", onNumPagesChanged);
+  //     // eventBus.off("scaleChanged", onScaleChanged);
+  //   };
+  // }, []);
 
-  const goToPage = (page) => {
-    const pageNum = Math.max(1, Math.min(page, numPages));
-    eventBus.emit("goToPage", { page: pageNum });
-  };
+  // const goToPage = (page) => {
+  //   const pageNum = Math.max(1, Math.min(page, numPages));
+  //   eventBus.emit("goToPage", { page: pageNum });
+  // };
 
-  const handlePageInput = (e) => {
-    if (e.key === "Enter") {
-      const page = parseInt(e.target.value, 10);
-      if (!isNaN(page)) {
-        goToPage(page);
-      }
-    }
-  };
+  // const handlePageInput = (e) => {
+  //   if (e.key === "Enter") {
+  //     const page = parseInt(e.target.value, 10);
+  //     if (!isNaN(page)) {
+  //       goToPage(page);
+  //     }
+  //   }
+  // };
 
+  const workerSrc = encodeURIComponent('/pdf.worker.mjs');
+  const viewerUrl = `/pdf-viewer/viewer.html?file=${encodeURIComponent(fileUrl)}&workerSrc=${workerSrc}`;
+  
   return (
     <div style={{ display: "flex", height: "100vh", fontFamily: "Inter, system-ui, sans-serif" }}>
       {/* Search Sidebar */}
@@ -73,7 +75,7 @@ const DocumentViewer = ({ fileUrl, fileName }) => {
           <div style={{ height: "20px", width: "1px", background: "#e5e7eb" }} />
 
           {/* Navigation Controls */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <button
               onClick={() => eventBus.emit("prevPage")}
               disabled={currentPage <= 1}
@@ -141,12 +143,12 @@ const DocumentViewer = ({ fileUrl, fileName }) => {
             >
               Next →
             </button>
-          </div>
+          </div> */}
 
           <div style={{ height: "20px", width: "1px", background: "#e5e7eb" }} />
 
           {/* Zoom Controls */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <button
               onClick={() => eventBus.emit("zoomOut")}
               style={{
@@ -178,7 +180,7 @@ const DocumentViewer = ({ fileUrl, fileName }) => {
             >
               +
             </button>
-          </div>
+          </div> */}
         </div>
 
         {/* PDF Viewer Container */}
@@ -190,7 +192,15 @@ const DocumentViewer = ({ fileUrl, fileName }) => {
             overflow: "hidden",
           }}
         >
-          <PDFViewer fileUrl={fileUrl} />
+          <iframe
+            src={viewerUrl}
+            width="100%"
+            height="100%"
+            style={{ border: 'none' }}
+            title={fileName}
+            onLoad={() => console.log('PDF Viewer loaded')}
+            onError={() => console.error('PDF Viewer failed to load')}
+          />
         </div>
       </div>
     </div>

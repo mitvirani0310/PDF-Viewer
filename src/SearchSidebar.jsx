@@ -1,59 +1,68 @@
-import { useState, useEffect } from "react";
-import eventBus from "./eventBus";
+import { useState, useEffect, useRef } from "react";
+// import eventBus from "./eventBus";
 
 const SearchSidebar = () => {
   const [query, setQuery] = useState("");
   const [currentMatch, setCurrentMatch] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
-  const [searchState, setSearchState] = useState(""); // "found", "not-found", "pending", ""
+  const [searchState, setSearchState] = useState("");
+  const channelRef = useRef(null);
 
   useEffect(() => {
-    const onSearchResults = ({ current, total }) => {
-      setCurrentMatch(current);
-      setTotalMatches(total);
-    };
-
-    const onSearchState = ({ state, result, current, total }) => {
-      setSearchState(state);
-      setCurrentMatch(current);
-      setTotalMatches(total);
+    // Initialize BroadcastChannel for communication with PDF viewer
+    channelRef.current = new BroadcastChannel('pdf-find');
+    
+    // Listen for messages from PDF viewer
+    channelRef.current.onmessage = (event) => {
+      const data = event.data;
+      console.log('data.current: ', data.current);
       
-      // Handle search result states
-      if (state === "found" || result === 0) {
-        // Search completed
-        if (total === 0 && query.trim() !== "") {
-          setSearchState("not-found");
-        } else {
-          setSearchState("found");
-        }
+      if (data?.type === 'search-results') {
+        setCurrentMatch(data.current || 0);
+        setTotalMatches(data.total || 0);
+        setSearchState(data.total > 0 ? 'found' : 'not-found');
+      }
+      
+      if (data?.type === 'search-cleared') {
+        setCurrentMatch(0);
+        setTotalMatches(0);
+        setSearchState('');
       }
     };
 
-    const onSearchCleared = () => {
-      setCurrentMatch(0);
-      setTotalMatches(0);
-      setSearchState("");
-    };
-
-    eventBus.on("searchResults", onSearchResults);
-    eventBus.on("searchState", onSearchState);
-    eventBus.on("searchCleared", onSearchCleared);
-
     return () => {
-      eventBus.off("searchResults", onSearchResults);
-      eventBus.off("searchState", onSearchState);
-      eventBus.off("searchCleared", onSearchCleared);
+      if (channelRef.current) {
+        channelRef.current.close();
+      }
     };
-  }, [query]);
+  }, []);
 
   const handleSearch = (searchQuery = query) => {
     const trimmedQuery = searchQuery.trim();
-    eventBus.emit("search", { query: trimmedQuery });
     
     if (trimmedQuery === "") {
+      // Clear search
+      if (channelRef.current) {
+        channelRef.current.postMessage({
+          cmd: 'clear-highlights'
+        });
+      }
       setCurrentMatch(0);
       setTotalMatches(0);
       setSearchState("");
+    } else {
+      // Start new search
+      if (channelRef.current) {
+        channelRef.current.postMessage({
+          cmd: 'find-new',
+          query: trimmedQuery,
+          highlightAll: true,
+          caseSensitive: false,
+          entireWord: false,
+          phraseSearch: true
+        });
+      }
+      setSearchState("pending");
     }
   };
 
@@ -61,7 +70,7 @@ const SearchSidebar = () => {
     const value = e.target.value;
     setQuery(value);
     
-    // Auto-search as user types (debounced)
+    // Auto-clear when input is empty
     if (value.trim() === "") {
       handleSearch("");
     }
@@ -74,15 +83,31 @@ const SearchSidebar = () => {
   };
 
   const nextMatch = () => {
-    if (totalMatches > 0) {
-      eventBus.emit("findNext");
-    }
+    
+      channelRef.current.postMessage({
+        cmd: 'find-next',
+        query: query.trim(),
+        prev: false,
+        highlightAll: true,
+        caseSensitive: false,
+        entireWord: false,
+        phraseSearch: true
+      });
+    
   };
 
   const prevMatch = () => {
-    if (totalMatches > 0) {
-      eventBus.emit("findPrev");
-    }
+    
+      channelRef.current.postMessage({
+        cmd: 'find-next',
+        query: query.trim(),
+        prev: true,
+        highlightAll: true,
+        caseSensitive: false,
+        entireWord: false,
+        phraseSearch: true
+      });
+    
   };
 
   const clearSearch = () => {
@@ -198,33 +223,13 @@ const SearchSidebar = () => {
           <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
             <button
               onClick={prevMatch}
-              disabled={currentMatch <= 1 || totalMatches === 0}
-              style={{
-                flex: 1,
-                padding: "8px 12px",
-                background: currentMatch <= 1 || totalMatches === 0 ? "#f9fafb" : "#ffffff",
-                color: currentMatch <= 1 || totalMatches === 0 ? "#9ca3af" : "#374151",
-                border: "1px solid #d1d5db",
-                borderRadius: "6px",
-                cursor: currentMatch <= 1 || totalMatches === 0 ? "not-allowed" : "pointer",
-                fontSize: "14px",
-              }}
             >
               ↑ Previous
             </button>
             <button
               onClick={nextMatch}
-              disabled={currentMatch >= totalMatches || totalMatches === 0}
-              style={{
-                flex: 1,
-                padding: "8px 12px",
-                background: currentMatch >= totalMatches || totalMatches === 0 ? "#f9fafb" : "#ffffff",
-                color: currentMatch >= totalMatches || totalMatches === 0 ? "#9ca3af" : "#374151",
-                border: "1px solid #d1d5db",
-                borderRadius: "6px",
-                cursor: currentMatch >= totalMatches || totalMatches === 0 ? "not-allowed" : "pointer",
-                fontSize: "14px",
-              }}
+              
+              
             >
               ↓ Next
             </button>
