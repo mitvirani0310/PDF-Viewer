@@ -5,97 +5,245 @@ const SearchSidebar = () => {
   const [query, setQuery] = useState("");
   const [currentMatch, setCurrentMatch] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
+  const [searchState, setSearchState] = useState(""); // "found", "not-found", "pending", ""
 
-  // Listen for search results from PDF.js
   useEffect(() => {
-    const onMatches = ({ total }) => {
-      setTotalMatches(total || 0);
+    const onSearchResults = ({ current, total }) => {
+      setCurrentMatch(current);
+      setTotalMatches(total);
     };
 
-    const onState = ({ current, total, state }) => {
-      setCurrentMatch(current || 0);
-      setTotalMatches(total || 0);
+    const onSearchState = ({ state, result, current, total }) => {
+      setSearchState(state);
+      setCurrentMatch(current);
+      setTotalMatches(total);
+      
+      // Handle search result states
+      if (state === "found" || result === 0) {
+        // Search completed
+        if (total === 0 && query.trim() !== "") {
+          setSearchState("not-found");
+        } else {
+          setSearchState("found");
+        }
+      }
     };
 
-    eventBus.on("pdf-find-matches", onMatches);
-    eventBus.on("pdf-find-state", onState);
+    const onSearchCleared = () => {
+      setCurrentMatch(0);
+      setTotalMatches(0);
+      setSearchState("");
+    };
+
+    eventBus.on("searchResults", onSearchResults);
+    eventBus.on("searchState", onSearchState);
+    eventBus.on("searchCleared", onSearchCleared);
 
     return () => {
-      eventBus.off("pdf-find-matches", onMatches);
-      eventBus.off("pdf-find-state", onState);
+      eventBus.off("searchResults", onSearchResults);
+      eventBus.off("searchState", onSearchState);
+      eventBus.off("searchCleared", onSearchCleared);
     };
-  }, []);
+  }, [query]);
 
-  const handleSearch = () => {
-    eventBus.emit("pdf-search", { query });
+  const handleSearch = (searchQuery = query) => {
+    const trimmedQuery = searchQuery.trim();
+    eventBus.emit("search", { query: trimmedQuery });
+    
+    if (trimmedQuery === "") {
+      setCurrentMatch(0);
+      setTotalMatches(0);
+      setSearchState("");
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setQuery(value);
+    
+    // Auto-search as user types (debounced)
+    if (value.trim() === "") {
+      handleSearch("");
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
   };
 
   const nextMatch = () => {
-    eventBus.emit("pdf-find-next");
+    if (totalMatches > 0) {
+      eventBus.emit("findNext");
+    }
   };
 
   const prevMatch = () => {
-    eventBus.emit("pdf-find-prev");
+    if (totalMatches > 0) {
+      eventBus.emit("findPrev");
+    }
   };
 
   const clearSearch = () => {
     setQuery("");
-    eventBus.emit("pdf-search", { query: "" });
-    setCurrentMatch(0);
-    setTotalMatches(0);
+    handleSearch("");
+  };
+
+  const getStatusMessage = () => {
+    if (!query.trim()) {
+      return "Enter search term";
+    }
+    
+    if (searchState === "pending") {
+      return "Searching...";
+    }
+    
+    if (totalMatches === 0) {
+      return "No matches found";
+    }
+    
+    return `${currentMatch} of ${totalMatches}`;
   };
 
   return (
     <div
       style={{
-        width: "250px",
-        borderRight: "1px solid #ddd",
-        padding: "10px",
+        width: "280px",
+        minWidth: "280px",
+        borderRight: "1px solid #e5e7eb",
+        padding: "16px",
         background: "#fafafa",
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
       }}
     >
-      <h3>Search</h3>
-      <input
-        type="text"
-        placeholder="Enter text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-        style={{ width: "100%", marginBottom: "8px" }}
-      />
-      
-      <div style={{ marginBottom: "8px" }}>
-        <button onClick={handleSearch} style={{ marginRight: "6px" }}>
+      <div>
+        <h3 style={{ margin: "0 0 12px 0", fontSize: "16px", fontWeight: "600" }}>
+          Search Document
+        </h3>
+        
+        <div style={{ position: "relative" }}>
+          <input
+            type="text"
+            placeholder="Enter search text..."
+            value={query}
+            onChange={handleInputChange}
+            onKeyPress={handleKeyPress}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              border: "1px solid #d1d5db",
+              borderRadius: "6px",
+              fontSize: "14px",
+              boxSizing: "border-box",
+            }}
+          />
+          {query && (
+            <button
+              onClick={clearSearch}
+              style={{
+                position: "absolute",
+                right: "8px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "4px",
+                color: "#6b7280",
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "8px" }}>
+        <button
+          onClick={() => handleSearch()}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            background: "#3b82f6",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "14px",
+          }}
+        >
           Search
         </button>
-        <button onClick={clearSearch} style={{ marginRight: "6px" }}>
+        <button
+          onClick={clearSearch}
+          style={{
+            padding: "8px 12px",
+            background: "#f3f4f6",
+            color: "#374151",
+            border: "1px solid #d1d5db",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "14px",
+          }}
+        >
           Clear
         </button>
       </div>
 
-      <div style={{ marginBottom: "8px" }}>
-        <button 
-          onClick={prevMatch} 
-          disabled={currentMatch <= 1 || totalMatches === 0}
-          style={{ marginRight: "6px" }}
-        >
-          ↑ Prev
-        </button>
-        <button 
-          onClick={nextMatch} 
-          disabled={currentMatch >= totalMatches || totalMatches === 0}
-        >
-          ↓ Next
-        </button>
-      </div>
+      {query.trim() && (
+        <div>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+            <button
+              onClick={prevMatch}
+              disabled={currentMatch <= 1 || totalMatches === 0}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                background: currentMatch <= 1 || totalMatches === 0 ? "#f9fafb" : "#ffffff",
+                color: currentMatch <= 1 || totalMatches === 0 ? "#9ca3af" : "#374151",
+                border: "1px solid #d1d5db",
+                borderRadius: "6px",
+                cursor: currentMatch <= 1 || totalMatches === 0 ? "not-allowed" : "pointer",
+                fontSize: "14px",
+              }}
+            >
+              ↑ Previous
+            </button>
+            <button
+              onClick={nextMatch}
+              disabled={currentMatch >= totalMatches || totalMatches === 0}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                background: currentMatch >= totalMatches || totalMatches === 0 ? "#f9fafb" : "#ffffff",
+                color: currentMatch >= totalMatches || totalMatches === 0 ? "#9ca3af" : "#374151",
+                border: "1px solid #d1d5db",
+                borderRadius: "6px",
+                cursor: currentMatch >= totalMatches || totalMatches === 0 ? "not-allowed" : "pointer",
+                fontSize: "14px",
+              }}
+            >
+              ↓ Next
+            </button>
+          </div>
 
-      <p style={{ fontSize: "14px", color: "#666" }}>
-        {totalMatches === 0 ? (
-          query ? "No matches found" : "Enter search term"
-        ) : (
-          `Match ${currentMatch} of ${totalMatches}`
-        )}
-      </p>
+          <div
+            style={{
+              padding: "8px 12px",
+              background: "#f3f4f6",
+              borderRadius: "6px",
+              fontSize: "14px",
+              color: "#6b7280",
+              textAlign: "center",
+            }}
+          >
+            {getStatusMessage()}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

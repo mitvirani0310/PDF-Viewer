@@ -1,38 +1,21 @@
-/* Basic layout styles */
-:root{
---bg: #f6f8fa;
---panel: #ffffff;
---muted: #6b7280;
---accent: #2563eb;
+/* Basic reset and layout */
+* {
+  box-sizing: border-box;
 }
-html,body,#root{height:100%;}
-body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--bg);}
-.app{display:flex;height:100vh;gap:12px;padding:12px;box-sizing:border-box}
-.sidebar{width:340px;min-width:240px;background:var(--panel);border-radius:8px;padding:12px;box-shadow:0 2px 8px rgba(15,23,42,0.06);}
-.viewer-wrap{flex:1;display:flex;flex-direction:column;gap:10px}
-.toolbar{display:flex;align-items:center;gap:8px;padding:8px;background:var(--panel);border-radius:8px}
-.viewerContainer{flex:1;overflow:auto;background:var(--panel);border-radius:8px;padding:12px}
-/* pdf.js viewer expects some classes to exist */
-.pdfViewer{position:relative}
-.viewerContainer .page{box-shadow:0 1px 0 rgba(0,0,0,0.06);margin:12px auto}
 
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
 
-/* small controls */
-.button{padding:6px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.06);background:white;cursor:pointer}
-.input{padding:8px;border-radius:6px;border:1px solid #e5e7eb}
-.small{font-size:13px;color:var(--muted)}
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  background: #f9fafb;
+  color: #111827;
+}
 
-
-/* highlight from PDF.js text layer uses .highlight class; ensure visible */
-.pdfViewer .highlight { background: #ffea8a; }
-
-
-/* make canvas pages responsive */
-.pdfViewer .page canvas{display:block;margin:0 auto}
-
-
-/* the pdf.js web/pdf_viewer.css will be imported by the viewer component for the text layer styles. */
-
+/* PDF.js viewer container styles */
 #viewerContainer {
   position: relative;
   overflow: auto;
@@ -41,8 +24,87 @@ body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--bg);
 }
 
 .pdfViewer {
+  padding: 20px;
+}
+
+/* PDF.js page styling */
+.pdfViewer .page {
+  margin: 0 auto 20px auto;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  background: white;
+}
+
+/* Text layer styling for search highlighting */
+.pdfViewer .textLayer {
   position: absolute;
-  top: 0;
   left: 0;
+  top: 0;
   right: 0;
+  bottom: 0;
+  color: transparent;
+  font-family: sans-serif;
+  overflow: hidden;
+}
+
+.pdfViewer .textLayer span {
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+/* Search highlighting styles */
+.pdfViewer .textLayer .highlight {
+  background-color: rgba(255, 255, 0, 0.6) !important;
+  border-radius: 2px;
+}
+
+.pdfViewer .textLayer .highlight.selected {
+  background-color: rgba(255, 165, 0, 0.8) !important;
+}
+
+/* Annotation layer */
+.pdfViewer .annotationLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Canvas styling */
+.pdfViewer .page canvas {
+  display: block;
+  margin: 0;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Button focus styles */
+button:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+input:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  border-color: #3b82f6;
 }

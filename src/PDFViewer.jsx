@@ -3,9 +3,9 @@ import * as pdfjsLib from "pdfjs-dist";
 import * as pdfjsViewer from "pdfjs-dist/web/pdf_viewer";
 import "pdfjs-dist/web/pdf_viewer.css";
 import eventBus from "./eventBus";
-import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+// Set up worker - this is crucial for PDF.js to work
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 const PDFViewer = ({ fileUrl }) => {
   const containerRef = useRef(null);
@@ -15,66 +15,89 @@ const PDFViewer = ({ fileUrl }) => {
   const [pdfViewer, setPdfViewer] = useState(null);
   const [findController, setFindController] = useState(null);
   const [eventBusInternal, setEventBusInternal] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [linkService, setLinkService] = useState(null);
 
   // Load PDF
   useEffect(() => {
-    const loadingTask = pdfjsLib.getDocument(fileUrl);
-    loadingTask.promise.then((loadedPdf) => {
-      setPdf(loadedPdf);
+    const loadPDF = async () => {
+      try {
+        const loadingTask = pdfjsLib.getDocument({
+          url: fileUrl,
+          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/cmaps/',
+          cMapPacked: true,
+        });
+        
+        const loadedPdf = await loadingTask.promise;
+        setPdf(loadedPdf);
 
-      const eventBusInstance = new pdfjsViewer.EventBus();
-      setEventBusInternal(eventBusInstance);
+        // Create event bus for PDF.js internal communication
+        const eventBusInstance = new pdfjsViewer.EventBus();
+        setEventBusInternal(eventBusInstance);
 
-      const linkService = new pdfjsViewer.PDFLinkService();
+        // Create link service
+        const linkServiceInstance = new pdfjsViewer.PDFLinkService({
+          eventBus: eventBusInstance,
+        });
+        setLinkService(linkServiceInstance);
 
-      const viewer = new pdfjsViewer.PDFViewer({
-        container: containerRef.current,
-        viewer: containerRef.current.querySelector("#viewer"),
-        eventBus: eventBusInstance,
-        textLayerMode: 2,
-        linkService,
-      });
+        // Create PDF viewer
+        const viewer = new pdfjsViewer.PDFViewer({
+          container: containerRef.current,
+          eventBus: eventBusInstance,
+          linkService: linkServiceInstance,
+          textLayerMode: 2, // Enable text layer for search
+          annotationMode: 2, // Enable annotations
+        });
 
-      linkService.setViewer(viewer);
+        linkServiceInstance.setViewer(viewer);
+        setPdfViewer(viewer);
 
-      viewer.setDocument(loadedPdf);
+        // Set the document
+        viewer.setDocument(loadedPdf);
+        linkServiceInstance.setDocument(loadedPdf);
 
-      const findCtrl = new pdfjsViewer.PDFFindController({
-        eventBus: eventBusInstance,
-        pdfViewer: viewer,
-        linkService,
-      });
+        // Create find controller for search functionality
+        const findCtrl = new pdfjsViewer.PDFFindController({
+          eventBus: eventBusInstance,
+          pdfViewer: viewer,
+          linkService: linkServiceInstance,
+        });
 
-      // viewer.setFindController(findCtrl);
-      viewer.findController = findCtrl; // optional
-      setFindController(findCtrl);
-      setPdfViewer(viewer);
-      // setFindController(findCtrl);
+        viewer.findController = findCtrl;
+        setFindController(findCtrl);
 
-      // Page change listener
-      eventBusInstance.on("pagechanging", (evt) => {
-        setCurrentPage(evt.pageNumber);
-        eventBus.emit("pageChanged", { page: evt.pageNumber });
-      });
+        // Listen for page changes
+        eventBusInstance.on("pagechanging", (evt) => {
+          eventBus.emit("pageChanged", { page: evt.pageNumber });
+          eventBus.emit("numPagesChanged", { numPages: loadedPdf.numPages });
+        });
 
-      // Optional: Zoom handling
-      viewer.currentScaleValue = "page-width";
-    });
+        // Set initial scale
+        viewer.currentScaleValue = "page-fit";
+
+        console.log("PDF loaded successfully");
+      } catch (error) {
+        console.error("Error loading PDF:", error);
+      }
+    };
+
+    if (fileUrl) {
+      loadPDF();
+    }
   }, [fileUrl]);
 
-  // EventBus listeners for page/zoom control
+  // Handle navigation and zoom controls
   useEffect(() => {
-    if (!pdfViewer) return;
+    if (!pdfViewer || !pdf) return;
 
     const goToPage = ({ page }) => {
-      if (page >= 1 && page <= pdfViewer.pdfDocument.numPages) {
+      if (page >= 1 && page <= pdf.numPages) {
         pdfViewer.currentPageNumber = page;
       }
     };
 
     const nextPage = () => {
-      if (pdfViewer.currentPageNumber < pdfViewer.pdfDocument.numPages) {
+      if (pdfViewer.currentPageNumber < pdf.numPages) {
         pdfViewer.currentPageNumber += 1;
       }
     };
@@ -86,11 +109,15 @@ const PDFViewer = ({ fileUrl }) => {
     };
 
     const zoomIn = () => {
-      pdfViewer.currentScale += 0.2;
+      const newScale = Math.min(pdfViewer.currentScale * 1.2, 5.0);
+      pdfViewer.currentScale = newScale;
+      eventBus.emit("scaleChanged", { scale: Math.round(newScale * 100) });
     };
 
     const zoomOut = () => {
-      pdfViewer.currentScale -= 0.2;
+      const newScale = Math.max(pdfViewer.currentScale / 1.2, 0.25);
+      pdfViewer.currentScale = newScale;
+      eventBus.emit("scaleChanged", { scale: Math.round(newScale * 100) });
     };
 
     eventBus.on("goToPage", goToPage);
@@ -106,152 +133,110 @@ const PDFViewer = ({ fileUrl }) => {
       eventBus.off("zoomIn", zoomIn);
       eventBus.off("zoomOut", zoomOut);
     };
-  }, [pdfViewer]);
+  }, [pdfViewer, pdf]);
 
-  // Search functionality
+  // Handle search functionality
   useEffect(() => {
     if (!findController || !eventBusInternal) return;
 
-    let allMatches = [];
-    let currentMatchIndex = 0;
-
-    const updateMatchesList = () => {
-      allMatches = [];
-      const textLayers = containerRef.current?.querySelectorAll(".textLayer");
-      textLayers?.forEach((layer) => {
-        layer.querySelectorAll("span").forEach((div) => {
-          if (div.style.backgroundColor === "yellow" || div.style.backgroundColor === "orange") {
-            allMatches.push(div);
-          }
-        });
-      });
-    };
-
-    const manualNavigate = (direction) => {
-      updateMatchesList();
-      if (allMatches.length === 0) return;
-
-      // Reset previous highlight
-      if (allMatches[currentMatchIndex]) allMatches[currentMatchIndex].style.backgroundColor = "yellow";
-
-      // Move
-      currentMatchIndex =
-        direction === "next"
-          ? (currentMatchIndex + 1) % allMatches.length
-          : currentMatchIndex > 0
-          ? currentMatchIndex - 1
-          : allMatches.length - 1;
-
-      // Highlight current
-      allMatches[currentMatchIndex].style.backgroundColor = "orange";
-      allMatches[currentMatchIndex].scrollIntoView({ behavior: "smooth", block: "center" });
-
-      eventBus.emit("pdf-find-state", {
-        current: currentMatchIndex + 1,
-        total: allMatches.length,
-      });
-    };
-
     const onSearch = ({ query }) => {
-      if (!query) {
-        findController?.reset();
-        return;
-      }
-
-      try {
-        findController.executeCommand("find", {
-          query,
-          caseSensitive: false,
+      if (!query || query.trim() === "") {
+        // Clear search
+        eventBusInternal.dispatch("find", {
+          type: "find",
+          query: "",
           phraseSearch: true,
+          caseSensitive: false,
+          entireWord: false,
           highlightAll: true,
           findPrevious: false,
         });
-      } catch (error) {
-        console.log("PDF.js search failed, using manual fallback", error);
-
-        // Manual fallback
-        const textLayers = containerRef.current?.querySelectorAll(".textLayer");
-        let totalMatches = 0;
-        textLayers?.forEach((layer) => {
-          layer.querySelectorAll("span").forEach((div) => {
-            div.style.backgroundColor = "transparent";
-            if (div.textContent.toLowerCase().includes(query.toLowerCase())) {
-              div.style.backgroundColor = "yellow";
-              totalMatches++;
-              if (totalMatches === 1) {
-                div.style.backgroundColor = "orange";
-                div.scrollIntoView({ behavior: "smooth", block: "center" });
-              }
-            }
-          });
-        });
-
-        eventBus.emit("pdf-find-matches", { total: totalMatches });
-        eventBus.emit("pdf-find-state", { current: totalMatches > 0 ? 1 : 0, total: totalMatches });
+        eventBus.emit("searchCleared");
+        return;
       }
+
+      // Execute search
+      eventBusInternal.dispatch("find", {
+        type: "find",
+        query: query.trim(),
+        phraseSearch: true,
+        caseSensitive: false,
+        entireWord: false,
+        highlightAll: true,
+        findPrevious: false,
+      });
     };
 
     const onFindNext = () => {
-      try {
-        findController.executeCommand("findagain", { findPrevious: false });
-      } catch {
-        manualNavigate("next");
+      if (findController && eventBusInternal) {
+        eventBusInternal.dispatch("findagain", {
+          type: "findagain",
+          source: findController,
+          findPrevious: false,
+        });
       }
     };
 
     const onFindPrev = () => {
-      try {
-        findController.executeCommand("findagain", { findPrevious: true });
-      } catch {
-        manualNavigate("prev");
+      if (findController && eventBusInternal) {
+        eventBusInternal.dispatch("findagain", {
+          type: "findagain", 
+          source: findController,
+          findPrevious: true,
+        });
       }
     };
 
-    const onFindMatches = (evt) => {
-      eventBus.emit("pdf-find-matches", { total: evt.matchesCount?.total || 0 });
-    };
-
-    const onFindState = (evt) => {
-      eventBus.emit("pdf-find-state", {
-        current: evt.matchesCount?.current || 0,
-        total: evt.matchesCount?.total || 0,
-        state: evt.state,
+    // Listen for search results from PDF.js
+    const onUpdateFindMatchesCount = (evt) => {
+      const { matchesCount } = evt;
+      eventBus.emit("searchResults", {
+        current: matchesCount.current || 0,
+        total: matchesCount.total || 0,
       });
     };
 
-    // Event registrations
-    eventBus.on("pdf-search", onSearch);
-    eventBus.on("pdf-find-next", onFindNext);
-    eventBus.on("pdf-find-prev", onFindPrev);
+    const onUpdateFindControlState = (evt) => {
+      const { state, result, matchesCount } = evt;
+      eventBus.emit("searchState", {
+        state,
+        result,
+        current: matchesCount?.current || 0,
+        total: matchesCount?.total || 0,
+      });
+    };
 
-    eventBusInternal.on("updatefindmatchescount", onFindMatches);
-    eventBusInternal.on("updatefindcontrolstate", onFindState);
+    // Register event listeners
+    eventBus.on("search", onSearch);
+    eventBus.on("findNext", onFindNext);
+    eventBus.on("findPrev", onFindPrev);
+
+    eventBusInternal.on("updatefindmatchescount", onUpdateFindMatchesCount);
+    eventBusInternal.on("updatefindcontrolstate", onUpdateFindControlState);
 
     return () => {
-      eventBus.off("pdf-search", onSearch);
-      eventBus.off("pdf-find-next", onFindNext);
-      eventBus.off("pdf-find-prev", onFindPrev);
-
-      eventBusInternal.off("updatefindmatchescount", onFindMatches);
-      eventBusInternal.off("updatefindcontrolstate", onFindState);
+      eventBus.off("search", onSearch);
+      eventBus.off("findNext", onFindNext);
+      eventBus.off("findPrev", onFindPrev);
+      
+      eventBusInternal.off("updatefindmatchescount", onUpdateFindMatchesCount);
+      eventBusInternal.off("updatefindcontrolstate", onUpdateFindControlState);
     };
   }, [findController, eventBusInternal]);
 
   return (
     <div
       ref={containerRef}
-      id="viewerContainer"
       style={{
-        flex: 1,
-        overflow: "auto",
         position: "absolute",
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
+        overflow: "auto",
       }}
     >
-      <div ref={viewerRef} id="viewer" className="pdfViewer" />
+      <div ref={viewerRef} className="pdfViewer" />
     </div>
   );
 };
