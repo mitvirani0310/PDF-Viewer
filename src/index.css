@@ -1,0 +1,48 @@
+/* Basic layout styles */
+:root{
+--bg: #f6f8fa;
+--panel: #ffffff;
+--muted: #6b7280;
+--accent: #2563eb;
+}
+html,body,#root{height:100%;}
+body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--bg);}
+.app{display:flex;height:100vh;gap:12px;padding:12px;box-sizing:border-box}
+.sidebar{width:340px;min-width:240px;background:var(--panel);border-radius:8px;padding:12px;box-shadow:0 2px 8px rgba(15,23,42,0.06);}
+.viewer-wrap{flex:1;display:flex;flex-direction:column;gap:10px}
+.toolbar{display:flex;align-items:center;gap:8px;padding:8px;background:var(--panel);border-radius:8px}
+.viewerContainer{flex:1;overflow:auto;background:var(--panel);border-radius:8px;padding:12px}
+/* pdf.js viewer expects some classes to exist */
+.pdfViewer{position:relative}
+.viewerContainer .page{box-shadow:0 1px 0 rgba(0,0,0,0.06);margin:12px auto}
+
+
+/* small controls */
+.button{padding:6px 10px;border-radius:6px;border:1px solid rgba(0,0,0,0.06);background:white;cursor:pointer}
+.input{padding:8px;border-radius:6px;border:1px solid #e5e7eb}
+.small{font-size:13px;color:var(--muted)}
+
+
+/* highlight from PDF.js text layer uses .highlight class; ensure visible */
+.pdfViewer .highlight { background: #ffea8a; }
+
+
+/* make canvas pages responsive */
+.pdfViewer .page canvas{display:block;margin:0 auto}
+
+
+/* the pdf.js web/pdf_viewer.css will be imported by the viewer component for the text layer styles. */
+
+#viewerContainer {
+  position: relative;
+  overflow: auto;
+  width: 100%;
+  height: 100%;
+}
+
+.pdfViewer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
